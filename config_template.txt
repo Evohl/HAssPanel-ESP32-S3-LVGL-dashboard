@@ -1,0 +1,119 @@
+// HA Panel – Konfigurationsdatei (Zendure Energy Monitor)
+// Auf SD-Karte als /config.txt speichern (Wurzelverzeichnis)
+// Zeilen mit // oder # werden ignoriert.
+
+// ── WiFi ──────────────────────────────────────────────────────
+WiFi_ssid=YOUR_WIFI_SSID
+WiFi_password=YOUR_WIFI_PASSWORD
+
+// ── Home Assistant MQTT ───────────────────────────────────────
+MQTT_server=192.168.1.x
+MQTT_port=1883
+MQTT_user=
+MQTT_passwd=
+
+// ── Zeitserver ────────────────────────────────────────────────
+NTP_server=pool.ntp.org
+NTP_timezone=CET-1CEST,M3.5.0/02,M10.5.0/03
+
+// Überschrift-Farbe aller Kacheln (Standard: grau)
+title_color=8B949E
+
+// ── Layout ────────────────────────────────────────────────────
+// Kommagetrennte Anzahl pro Zeile (oben→unten), Entities in Reihenfolge
+// Beispiel: 2,4  → Zeile 1: entity1+2  |  Zeile 2: entity3+4+5+6
+// Leer lassen / auskommentieren → automatisches Layout
+layout=2,3
+
+// ── Entities ──────────────────────────────────────────────────
+entity_count=5
+
+// ── Zeile 1 (oben, 2 große Kacheln) ──────────────────────────
+entity1_type=group
+entity1_label=Solar
+entity1_topic=homeassistant/sensor/solarflow_solar_input/state
+entity1_unit=W
+entity1_color=FEA020
+entity1_sub_count=4
+entity1_sub1_label=Panel 1
+entity1_sub1_topic=homeassistant/sensor/solarflow_panel_1/state
+entity1_sub1_unit=W
+entity1_sub2_label=Panel 2
+entity1_sub2_topic=homeassistant/sensor/solarflow_panel_2/state
+entity1_sub2_unit=W
+entity1_sub3_label=Panel 3
+entity1_sub3_topic=homeassistant/sensor/solarflow_panel_3/state
+entity1_sub3_unit=W
+entity1_sub4_label=Panel 4
+entity1_sub4_topic=homeassistant/sensor/solarflow_panel_4/state
+entity1_sub4_unit=W
+
+entity2_type=group
+entity2_label=Batterie
+entity2_topic=homeassistant/sensor/solarflow_battery_level/state
+entity2_unit=%
+entity2_color=3FB950
+// < 20 % → rot | 20-50 % → orange | ≥ 50 % → grün (Basisfarbe)
+entity2_thresh_count=2
+entity2_thresh1_val=20
+entity2_thresh1_color=F85149
+entity2_thresh2_val=50
+entity2_thresh2_color=FEA020
+entity2_sub_count=2
+entity2_sub1_label=Laden
+entity2_sub1_topic=homeassistant/sensor/solarflow_pack_input_power/state
+entity2_sub1_unit=W
+entity2_sub2_label=Entladen
+entity2_sub2_topic=homeassistant/sensor/solarflow_pack_output_power/state
+entity2_sub2_unit=W
+
+// ── Zeile 2 (unten, 4 kleinere Kacheln) ──────────────────────
+entity3_type=group
+entity3_label=Netz
+entity3_topic=homeassistant/sensor/wifi_ir_smartmeter_interface_smi_power_cur/state
+entity3_unit=W
+entity3_color=F85149
+// < 0 W (Einspeisung) -> gruen | 0-200 W -> gelb | >= 200 W -> rot
+entity3_thresh_count=2
+entity3_thresh1_val=0
+entity3_thresh1_color=3FB950
+entity3_thresh2_val=200
+entity3_thresh2_color=FEA020
+entity3_sub_count=2
+entity3_sub1_label=Bezug heute
+entity3_sub1_topic=homeassistant/sensor/energy_import_daily/state
+entity3_sub1_unit=kWh
+entity3_sub2_label=Einspeisung
+entity3_sub2_topic=homeassistant/sensor/energy_export_daily/state
+entity3_sub2_unit=kWh
+
+entity4_type=group
+entity4_label=Verbrauch
+entity4_topic=homeassistant/sensor/power_consumption/state
+entity4_unit=W
+entity4_color=58A6FF
+entity4_sub_count=3
+entity4_sub1_label=Von Solar
+entity4_sub1_topic=homeassistant/sensor/solarflow_solar_input/state
+entity4_sub1_unit=W
+entity4_sub2_label=Vom Netz
+entity4_sub2_topic=homeassistant/sensor/power_import/state
+entity4_sub2_unit=W
+entity4_sub3_label=Von Batterie
+entity4_sub3_topic=homeassistant/sensor/solarflow_pack_output_power/state
+entity4_sub3_unit=W
+
+entity5_type=group
+entity5_label=Temperatur
+entity5_topic=homeassistant/sensor/solarflow_device_temp/state
+entity5_unit=C
+entity5_color=F85149
+// < 40 C -> gruen | 40-55 C -> orange | >= 55 C -> rot
+entity5_thresh_count=2
+entity5_thresh1_val=40
+entity5_thresh1_color=3FB950
+entity5_thresh2_val=55
+entity5_thresh2_color=FEA020
+entity5_sub_count=1
+entity5_sub1_label=Zendure Kuhlung
+entity5_sub1_topic=homeassistant/switch/zendure_kuhlung/state

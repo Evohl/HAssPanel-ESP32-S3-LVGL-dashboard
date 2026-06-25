@@ -1,0 +1,20 @@
+# Persönliche Konfiguration mit Zugangsdaten – niemals committen
+config.txt
+
+# PlatformIO Build-Artefakte
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Compiler
+*.o
+*.d
+*.elf
+*.bin
+*.map
