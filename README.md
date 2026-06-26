@@ -45,6 +45,8 @@ A fully configurable 7" touch dashboard for Home Assistant, running on the ESP32
 - **SD card config** — change entities without reflashing
 - **NTP clock** in the header bar
 - **FreeRTOS** dual-core: MQTT on Core 0, LVGL on Core 1
+- **OTA firmware update** via ArduinoOTA (PlatformIO `ha_panel_ota` environment)
+- **HTTP SD-card upload** — update `config.txt` via browser at `http://hassPanel.local/`
 
 ---
 
@@ -67,11 +69,23 @@ Managed via PlatformIO (`platformio.ini`):
 1. Install [PlatformIO](https://platformio.org/)
 2. Clone this repo
 3. Copy `config_template.txt` to your SD card root as **`/config.txt`** and fill in your credentials
-4. Build and flash:
+4. Build and flash (first time via USB):
 
 ```bash
-pio run -t upload
+pio run -e ha_panel -t upload
 ```
+
+### OTA Firmware Update (after first USB flash)
+
+```bash
+pio run -e ha_panel_ota -t upload
+```
+
+The device is reachable as `hassPanel.local` via mDNS. The `upload_port` in `platformio.ini` can also be set to the device's IP address.
+
+### Update `config.txt` via Browser
+
+Open `http://hassPanel.local/` in a browser, select the new `config.txt` and click **Hochladen**. The display restarts automatically. A backup of the previous config is kept as `/config.txt.bak` on the SD card.
 
 ---
 
@@ -176,12 +190,15 @@ All colors are 6-digit hex without `#`, e.g. `FEA020`.
 ## Architecture
 
 ```
-Core 0 (mqtt_task)     Core 1 (lvgl_task)
+Core 0                 Core 1 (lvgl_task)
 ──────────────────     ─────────────────────
-WiFi reconnect         lv_timer_handler()
-MQTT reconnect         1-sec entity flush
-mqttClient.loop()      ui_update_entity()
-                       ui_update_header()
+mqtt_task:             lv_timer_handler()
+  WiFi reconnect       1-sec entity flush
+  MQTT reconnect       ui_update_entity()
+  mqttClient.loop()    ui_update_header()
+ota_task:
+  ArduinoOTA.handle()
+  httpServer.handle()
           └── g_lvgl_mutex (FreeRTOS) ──┘
 ```
 
@@ -198,8 +215,9 @@ MQTT sets `entity.dirty = true`; the LVGL task flushes all dirty entities once p
 | `ui.ino` | Tile construction and UI updates |
 | `mqtt.ino` | MQTT callback, subscribe, reconnect |
 | `config.ino` | SD card config parser |
+| `ota.ino` | ArduinoOTA + HTTP SD-card upload server |
 | `config_template.txt` | Config template (copy to SD as `config.txt`) |
-| `platformio.ini` | PlatformIO build config |
+| `platformio.ini` | PlatformIO build config (`ha_panel` USB, `ha_panel_ota` OTA) |
 | `lv_conf.h` | LVGL configuration |
 
 ---

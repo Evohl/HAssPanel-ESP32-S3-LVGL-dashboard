@@ -236,6 +236,9 @@ void setup() {
     Serial.println("WiFi: Verbindung fehlgeschlagen");
   }
 
+  // OTA + HTTP SD-Upload (nur wenn WiFi verbunden)
+  if (WiFi.status() == WL_CONNECTED) ota_setup();
+
   // MQTT initialisieren
   mqttClient.setServer(HASS_SERVER.c_str(), HASS_SERVERPORT);
   mqttClient.setCallback(mqttCallback);
@@ -249,7 +252,9 @@ void setup() {
   xTaskCreatePinnedToCore(lvgl_task, "LVGL", 8192, NULL, 2, NULL, 1);
   // WiFi/MQTT auf Core 0 (Priorität 1) – getrennte Cores = kein Mutex-Konflikt
   xTaskCreatePinnedToCore(mqtt_task, "MQTT", 4096, NULL, 1, NULL, 0);
-  Serial.println("LVGL-Task: Core 1 | MQTT-Task: Core 0");
+  // OTA/HTTP auf Core 0 (Priorität 1)
+  xTaskCreatePinnedToCore(ota_task,  "OTA",  4096, NULL, 1, NULL, 0);
+  Serial.println("LVGL-Task: Core 1 | MQTT-Task: Core 0 | OTA-Task: Core 0");
 }
 
 // ─────────────────────────────────────────────────────────────
