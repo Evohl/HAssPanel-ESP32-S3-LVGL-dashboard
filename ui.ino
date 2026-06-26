@@ -32,6 +32,12 @@ static lv_style_t st_screen;
 static lv_style_t st_header;
 static lv_style_t st_card;
 
+// Boot-Screen + OTA-Overlay Widgets (vorwärts-deklariert)
+static lv_obj_t* g_boot_status_lbl = nullptr;
+static lv_obj_t* g_ota_bar         = nullptr;
+static lv_obj_t* g_ota_pct_lbl     = nullptr;
+static lv_obj_t* g_ota_log_lbl     = nullptr;
+
 static bool updating_from_mqtt = false;
 
 // ── Schalter-Callback (Tile-Switch) ───────────────────────────
@@ -98,7 +104,7 @@ static void build_header() {
 
   // App-Titel
   lv_obj_t* title = lv_label_create(header);
-  lv_label_set_text(title, "HOME ASSISTANT PANEL");
+  lv_label_set_text(title, g_panel_title.c_str());
   lv_obj_set_style_text_color(title, lv_color_hex(COL_ACCENT), 0);
   lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
   lv_obj_align(title, LV_ALIGN_LEFT_MID, 0, 0);
@@ -379,6 +385,8 @@ static void build_tiles() {
 // ── Öffentliche Funktionen ────────────────────────────────────
 
 void ui_build() {
+  lv_obj_clean(lv_scr_act());  // Boot-Screen entfernen
+  g_boot_status_lbl = nullptr; // Pointer ungültig machen (Objekt wurde gelöscht)
   init_styles();
   lv_obj_add_style(lv_scr_act(), &st_screen, 0);
   build_header();
@@ -484,4 +492,94 @@ void ui_update_header() {
     lv_obj_set_style_text_color(lbl_mqtt,
       mqtt_connected ? lv_color_hex(COL_OK) : lv_color_hex(COL_DANGER), 0);
   }
+}
+
+// ── Boot-Screen ───────────────────────────────────────────────
+void ui_boot_show() {
+  lv_obj_t* scr = lv_scr_act();
+  lv_obj_set_style_bg_color(scr, lv_color_hex(COL_BG), 0);
+  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+
+  lv_obj_t* lbl_t = lv_label_create(scr);
+  lv_label_set_text(lbl_t, g_panel_title.c_str());
+  lv_obj_set_style_text_color(lbl_t, lv_color_hex(COL_ACCENT), 0);
+  lv_obj_set_style_text_font(lbl_t, &lv_font_montserrat_28, 0);
+  lv_obj_align(lbl_t, LV_ALIGN_CENTER, 0, -40);
+
+  g_boot_status_lbl = lv_label_create(scr);
+  lv_label_set_text(g_boot_status_lbl, "Starte ...");
+  lv_obj_set_style_text_color(g_boot_status_lbl, lv_color_hex(COL_SUBTEXT), 0);
+  lv_obj_set_style_text_font(g_boot_status_lbl, &lv_font_montserrat_16, 0);
+  lv_obj_align(g_boot_status_lbl, LV_ALIGN_CENTER, 0, 20);
+
+  lv_timer_handler();
+}
+
+void ui_boot_status(const char* msg) {
+  if (!g_boot_status_lbl) return;
+  lv_label_set_text(g_boot_status_lbl, msg);
+  lv_timer_handler();
+}
+
+// ── OTA-Overlay ───────────────────────────────────────────────
+void ui_ota_show() {
+  if (!g_lvgl_mutex) return;
+  if (xSemaphoreTake(g_lvgl_mutex, pdMS_TO_TICKS(500)) != pdTRUE) return;
+
+  lv_obj_t* ov = lv_obj_create(lv_scr_act());
+  lv_obj_set_size(ov, screenWidth, screenHeight);
+  lv_obj_set_pos(ov, 0, 0);
+  lv_obj_set_style_bg_color(ov, lv_color_hex(COL_BG), 0);
+  lv_obj_set_style_bg_opa(ov, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(ov, 0, 0);
+  lv_obj_set_style_radius(ov, 0, 0);
+  lv_obj_clear_flag(ov, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t* lbl_title = lv_label_create(ov);
+  lv_label_set_text(lbl_title, "OTA UPDATE");
+  lv_obj_set_style_text_color(lbl_title, lv_color_hex(COL_ACCENT), 0);
+  lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_28, 0);
+  lv_obj_align(lbl_title, LV_ALIGN_CENTER, 0, -90);
+
+  g_ota_bar = lv_bar_create(ov);
+  lv_obj_set_size(g_ota_bar, 500, 24);
+  lv_obj_align(g_ota_bar, LV_ALIGN_CENTER, 0, -20);
+  lv_bar_set_range(g_ota_bar, 0, 100);
+  lv_bar_set_value(g_ota_bar, 0, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(g_ota_bar, lv_color_hex(COL_BORDER), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(g_ota_bar, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(g_ota_bar, lv_color_hex(COL_ACCENT), LV_PART_INDICATOR);
+  lv_obj_set_style_radius(g_ota_bar, 4, LV_PART_MAIN);
+  lv_obj_set_style_radius(g_ota_bar, 4, LV_PART_INDICATOR);
+
+  g_ota_pct_lbl = lv_label_create(ov);
+  lv_label_set_text(g_ota_pct_lbl, "0 %");
+  lv_obj_set_style_text_color(g_ota_pct_lbl, lv_color_hex(COL_TEXT), 0);
+  lv_obj_set_style_text_font(g_ota_pct_lbl, &lv_font_montserrat_20, 0);
+  lv_obj_align(g_ota_pct_lbl, LV_ALIGN_CENTER, 0, 22);
+
+  g_ota_log_lbl = lv_label_create(ov);
+  lv_label_set_text(g_ota_log_lbl, "Transferring firmware...");
+  lv_obj_set_style_text_color(g_ota_log_lbl, lv_color_hex(COL_SUBTEXT), 0);
+  lv_obj_set_style_text_font(g_ota_log_lbl, &lv_font_montserrat_14, 0);
+  lv_obj_set_width(g_ota_log_lbl, 600);
+  lv_obj_set_style_text_align(g_ota_log_lbl, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(g_ota_log_lbl, LV_ALIGN_CENTER, 0, 66);
+
+  xSemaphoreGive(g_lvgl_mutex);
+}
+
+void ui_ota_progress(int pct) {
+  if (!g_ota_bar || !g_ota_pct_lbl) return;
+  if (xSemaphoreTake(g_lvgl_mutex, pdMS_TO_TICKS(50)) != pdTRUE) return;
+  lv_bar_set_value(g_ota_bar, pct, LV_ANIM_OFF);
+  lv_label_set_text_fmt(g_ota_pct_lbl, "%d %%", pct);
+  xSemaphoreGive(g_lvgl_mutex);
+}
+
+void ui_ota_log(const char* msg) {
+  if (!g_ota_log_lbl) return;
+  if (xSemaphoreTake(g_lvgl_mutex, pdMS_TO_TICKS(50)) != pdTRUE) return;
+  lv_label_set_text(g_ota_log_lbl, msg);
+  xSemaphoreGive(g_lvgl_mutex);
 }

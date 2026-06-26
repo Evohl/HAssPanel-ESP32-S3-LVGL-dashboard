@@ -10,6 +10,8 @@
 //    GET  /restart   → Fernstart
 //    GET  /upload    → Datei-Upload Formular
 //    POST /upload    → SD-Karten Datei-Upload
+//    GET  /firmware  → Firmware-Update Formular
+//    POST /firmware  → Firmware flashen (HTTP OTA)
 //
 //  OTA Firmware:
 //    pio run -e ha_panel_ota -t upload
@@ -70,6 +72,7 @@ static String nav() {
          "<a href='/'>Status</a>"
          "<a href='/config'>Config</a>"
          "<a href='/log'>Log</a>"
+         "<a href='/firmware'>Firmware</a>"
          "<form style='margin:0' action='/restart' method='GET'>"
          "<button class='red' onclick=\"return confirm('Neustart?')\">&#8635; Neustart</button>"
          "</form>"
@@ -264,20 +267,128 @@ static void handleUploadDone() {
   if (_uploadOk) { delay(3000); ESP.restart(); }
 }
 
+// ─── GET /firmware ──────────────────────────────────────────
+static void handleFirmwarePage() {
+  String body =
+    "<h2>Firmware Update</h2>"
+    "<div class='card'>"
+    "<p style='color:#fea020'>Display schaltet w&auml;hrend des Updates aus.<br>"
+    "Nur .bin Dateien aus PlatformIO Build (.pio/build/ha_panel/firmware.bin).</p>"
+    "<form method='POST' action='/firmware' enctype='multipart/form-data' onsubmit='go()'>"
+    "<input type='file' name='firmware' accept='.bin' id='f'>"
+    "<br><input type='submit' id='btn' value='Firmware flashen'>"
+    "</form>"
+    "<div id='wait' style='display:none;margin-top:1.2em'>"
+    "<h2 class='warn'>&#9203; Flash l&auml;uft &ndash; bitte warten...</h2>"
+    "<p style='color:#8b949e'>Nicht die Seite schlie&szlig;en oder das Ger&auml;t trennen.<br>"
+    "Das Display startet nach dem Update automatisch neu.</p>"
+    "</div>"
+    "<script>"
+    "function go(){"
+    "var f=document.getElementById('f');"
+    "if(!f.files.length){alert('Bitte eine .bin Datei ausw\u00e4hlen.');return false;}"
+    "document.getElementById('btn').disabled=true;"
+    "document.getElementById('btn').value='Wird hochgeladen...';"
+    "document.getElementById('wait').style.display='block';"
+    "}"
+    "</script>"
+    "</div>";
+  httpServer.send(200, "text/html; charset=utf-8", page("Firmware", body));
+}
+
+// ─── POST /firmware – Firmware flashen ──────────────────────
+static bool _fwOk = false;
+
+static void handleFirmwareUpload() {
+  HTTPUpload& upload = httpServer.upload();
+  if (upload.status == UPLOAD_FILE_START) {
+    _fwOk = false;
+    webLog("Firmware upload: " + upload.filename);
+    // Tasks suspendieren + Backlight aus (wie ArduinoOTA)
+    g_ota_active   = true;
+    g_ota_show_req = true;  // lvgl_task suspendiert sich selbst
+    delay(20);              // kurz warten bis Tasks suspended sind
+    if (g_mqtt_task_handle) vTaskSuspend(g_mqtt_task_handle);
+    digitalWrite(TFT_BL, LOW);
+    if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
+      webLog("Firmware: begin failed: " + String(Update.errorString()));
+    }
+  } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (Update.write(upload.buf, upload.currentSize) != upload.currentSize) {
+      webLog("Firmware: write error: " + String(Update.errorString()));
+    }
+  } else if (upload.status == UPLOAD_FILE_END) {
+    if (Update.end(true)) {
+      _fwOk = true;
+      webLog("Firmware OK: " + String(upload.totalSize) + " B - Neustart...");
+    } else {
+      webLog("Firmware: end failed: " + String(Update.errorString()));
+    }
+  }
+}
+
+static void handleFirmwareDone() {
+  if (_fwOk) {
+    httpServer.send(200, "text/html; charset=utf-8",
+      page("Firmware", "<h2 class='ok'>&#10003; Update OK</h2><p>Neustart in 3 Sekunden...</p>"));
+    delay(3000);
+    ESP.restart();
+  } else {
+    // Fehler: Tasks wieder starten
+    g_ota_active     = false;
+    g_ota_error_time = millis();
+    if (g_lvgl_task_handle) vTaskResume(g_lvgl_task_handle);
+    if (g_mqtt_task_handle) vTaskResume(g_mqtt_task_handle);
+    digitalWrite(TFT_BL, HIGH);
+    httpServer.send(500, "text/html; charset=utf-8",
+      page("Firmware", "<h2 class='err'>&#10007; Update fehlgeschlagen</h2>"
+        "<p>" + String(Update.errorString()) + "</p>"
+        "<a href='/firmware' style='color:#58a6ff'>Nochmal versuchen</a>"));
+  }
+}
+
 // ─── Setup (nach WiFi-Verbindung aufrufen) ───────────────────
 void ota_setup() {
   ArduinoOTA.setHostname(CL_hostname.c_str());
   ArduinoOTA.onStart([]() {
     webLog("OTA Start: " + String(ArduinoOTA.getCommand() == U_FLASH ? "Firmware" : "FS"));
+    g_ota_active   = true;
+    g_ota_show_req = true;
+    digitalWrite(TFT_BL, LOW);  // Backlight aus – kein sichtbares LCD-Flackern
   });
-  ArduinoOTA.onEnd([]() { webLog("OTA: Fertig"); });
+  ArduinoOTA.onEnd([]() {
+    webLog("OTA: Fertig");
+    digitalWrite(TFT_BL, HIGH);  // Backlight an (Reboot folgt gleich)
+  });
   ArduinoOTA.onProgress([](unsigned int p, unsigned int t) {
-    static int last = -1;
-    int pct = (p * 100) / t;
+    static int last_pct = -1;
+    static int last_log = -1;
+    int pct    = (p * 100) / t;
     int bucket = pct / 10;
-    if (bucket != last) { last = bucket; webLog("OTA: " + String(pct) + "%"); }
+    if (pct != last_pct) {           // Bar: jedes %
+      last_pct = pct;
+      ui_ota_progress(pct);
+    }
+    if (bucket != last_log) {        // Log + webLog: alle 10%
+      last_log = bucket;
+      webLog("OTA: " + String(pct) + "%");
+      String msg = "Uploading: " + String(pct) + " %";
+      ui_ota_log(msg.c_str());
+    }
   });
-  ArduinoOTA.onError([](ota_error_t e) { webLog("OTA Fehler: " + String(e)); });
+  ArduinoOTA.onError([](ota_error_t e) {
+    webLog("OTA Error: " + String(e));
+    String err = "Error (" + String(e) + "): ";
+    if      (e == OTA_AUTH_ERROR)    err += "Auth failed";
+    else if (e == OTA_BEGIN_ERROR)   err += "Begin failed";
+    else if (e == OTA_CONNECT_ERROR) err += "Connect failed";
+    else if (e == OTA_RECEIVE_ERROR) err += "Receive failed";
+    else if (e == OTA_END_ERROR)     err += "End failed";
+    g_ota_error_time = millis();
+    if (g_lvgl_task_handle) vTaskResume(g_lvgl_task_handle);
+    if (g_mqtt_task_handle) vTaskResume(g_mqtt_task_handle);
+    digitalWrite(TFT_BL, HIGH);  // Backlight wieder an
+  });
   ArduinoOTA.begin();
 
   // mDNS starten damit <hostname>.local auflösbar ist
@@ -293,6 +404,8 @@ void ota_setup() {
   httpServer.on("/restart",  HTTP_GET,  handleRestart);
   httpServer.on("/upload",   HTTP_GET,  handleUploadPage);
   httpServer.on("/upload",   HTTP_POST, handleUploadDone, handleUpload);
+  httpServer.on("/firmware", HTTP_GET,  handleFirmwarePage);
+  httpServer.on("/firmware", HTTP_POST, handleFirmwareDone, handleFirmwareUpload);
   httpServer.begin();
 
   webLog("WebUI: http://" + CL_hostname + ".local  (" + WiFi.localIP().toString() + ")");
@@ -303,8 +416,7 @@ void ota_setup() {
 void ota_task(void* param) {
   while (true) {
     ArduinoOTA.handle();
-    httpServer.handleClient();
-    // Kürzere Pause damit OTA-Updates schnell reagieren
-    vTaskDelay(pdMS_TO_TICKS(5));
+    if (!g_ota_active) httpServer.handleClient();
+    vTaskDelay(pdMS_TO_TICKS(g_ota_active ? 1 : 5));  // OTA: schneller pollen
   }
 }

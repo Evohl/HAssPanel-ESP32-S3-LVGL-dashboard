@@ -145,6 +145,7 @@ lv_obj_t* lbl_mqtt = nullptr;
 // ─── Globale UI-Einstellungen ─────────────────────────────────
 uint32_t g_title_color     = 0x8B949E;  // Überschrift-Farbe aller Kacheln (grau)
 uint32_t g_sub_label_color = 0x8B949E;  // Farbe der Sub-Entity-Namen (grau)
+String   g_panel_title     = "HOME ASSISTANT PANEL";  // Titel in der Kopfzeile
 
 // Benutzerdefiniertes Layout: layout=2,4 → 2 Tiles oben, 4 unten
 // g_layout_rows == 0 → automatisches Layout
@@ -156,9 +157,20 @@ SemaphoreHandle_t g_lvgl_mutex = NULL;
 #define LVGL_LOCK()   xSemaphoreTake(g_lvgl_mutex, portMAX_DELAY)
 #define LVGL_UNLOCK() xSemaphoreGive(g_lvgl_mutex)
 
+// ─── OTA-State ───────────────────────────────────────────────
+volatile bool          g_ota_active        = false;
+volatile bool          g_ota_show_req      = false;
+volatile unsigned long g_ota_error_time    = 0;
+TaskHandle_t           g_lvgl_task_handle  = NULL;
+TaskHandle_t           g_mqtt_task_handle  = NULL;
+
 // ─── WiFi/MQTT-Task auf Core 0 ─────────────────────────────
 void mqtt_task(void* param) {
   while (true) {
+    if (g_ota_active) {
+      vTaskSuspend(NULL);  // sicherer Suspend-Punkt: kein Mutex gehalten
+      continue;
+    }
     if (WiFi.status() == WL_CONNECTED) {
       if (!mqttClient.connected()) {
         mqtt_connected = false;
@@ -178,13 +190,30 @@ void mqtt_task(void* param) {
 void lvgl_task(void* param) {
   unsigned long last_flush = 0;
   while (true) {
+    // OTA gestartet: lvgl_task suspendieren – Display friert ein, kein DMA-Konflikt
+    if (g_ota_show_req) {
+      g_ota_show_req = false;
+      vTaskSuspend(NULL);   // kein lv_timer_handler mehr bis Resume
+      // nach vTaskResume() (bei OTA-Fehler) geht es hier weiter
+    }
+
     // LVGL intern verarbeiten (Animationen, Timers, Rendering)
     LVGL_LOCK();
     lv_timer_handler();
     LVGL_UNLOCK();
 
-    // UI-Updates + Uhrzeit gebündelt alle 2 Sekunden
-    if (millis() - last_flush >= 1000) {
+    // Nach OTA-Fehler: nach 3s zurück zum Hauptscreen
+    if (g_ota_error_time > 0 && millis() - g_ota_error_time > 3000) {
+      g_ota_error_time = 0;
+      g_ota_active     = false;
+      if (g_mqtt_task_handle) vTaskResume(g_mqtt_task_handle);
+      LVGL_LOCK();
+      ui_build();
+      LVGL_UNLOCK();
+    }
+
+    // UI-Updates pausieren während OTA
+    if (!g_ota_active && millis() - last_flush >= 1000) {
       last_flush = millis();
       LVGL_LOCK();
       getLocalTime(&tm_info);
@@ -216,31 +245,46 @@ void setup() {
   sd_init();
   loadconfig();
 
-  // LVGL UI aufbauen
-  ui_build();
-  lv_timer_handler();
+  // Boot-Screen
+  ui_boot_show();
 
   // WiFi verbinden
-  WiFi.setHostname(CL_hostname.c_str());  // Hostname vor begin() setzen → DHCP + mDNS
+  WiFi.setHostname(CL_hostname.c_str());
   WiFi.setAutoReconnect(true);
   WiFi.begin(CL_wifissid.c_str(), CL_wifipassword.c_str());
   Serial.print("WiFi verbinden mit: ");
   Serial.println(CL_wifissid);
-  for (int i = 0; i < 40 && WiFi.status() != WL_CONNECTED; i++) {
+  ui_boot_status(("WiFi: " + CL_wifissid + " ...").c_str());
+  for (int i = 0; i < 120 && WiFi.status() != WL_CONNECTED; i++) {
     delay(500);
     lv_timer_handler();
   }
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("WiFi: " + WiFi.localIP().toString());
+    String ip = WiFi.localIP().toString();
+    Serial.println("WiFi: " + ip);
+    ui_boot_status(("WiFi: " + ip).c_str());
     configTzTime(timezone.c_str(), ntpServer.c_str());
     delay(800);
     getLocalTime(&tm_info);
   } else {
     Serial.println("WiFi: Verbindung fehlgeschlagen");
+    ui_boot_status("WiFi: Verbindung fehlgeschlagen");
   }
 
   // OTA + HTTP SD-Upload (nur wenn WiFi verbunden)
-  if (WiFi.status() == WL_CONNECTED) ota_setup();
+  if (WiFi.status() == WL_CONNECTED) {
+    ota_setup();
+    String ota_msg = "OTA bereit - http://" + CL_hostname + ".local";
+    ui_boot_status(ota_msg.c_str());
+    lv_timer_handler();
+    delay(600);
+  }
+
+  // Haupt-UI aufbauen (ersetzt Boot-Screen) + Mutex VOR MQTT
+  // (mqttCallback ruft LVGL_LOCK() auf, kommt bei retained Messages während subscribe())
+  ui_build();
+  lv_timer_handler();
+  g_lvgl_mutex = xSemaphoreCreateMutex();
 
   // MQTT initialisieren
   mqttClient.setServer(HASS_SERVER.c_str(), HASS_SERVERPORT);
@@ -248,12 +292,10 @@ void setup() {
   mqttClient.setKeepAlive(30);
   mqttClient.setBufferSize(1024);
   mqttReconnect();
-
   // Mutex + Tasks starten
-  g_lvgl_mutex = xSemaphoreCreateMutex();
   // LVGL auf Core 1 (Priorität 2)
-  xTaskCreatePinnedToCore(lvgl_task, "LVGL", 8192, NULL, 2, NULL, 1);
-  // WiFi/MQTT auf Core 0 (Priorität 1) – getrennte Cores = kein Mutex-Konflikt
+  xTaskCreatePinnedToCore(lvgl_task, "LVGL", 8192, NULL, 2, &g_lvgl_task_handle, 1);
+  // WiFi/MQTT auf Core 0 (Priorität 1)
   xTaskCreatePinnedToCore(mqtt_task, "MQTT", 4096, NULL, 1, NULL, 0);
   // OTA/HTTP auf Core 0 (Priorität 1)
   xTaskCreatePinnedToCore(ota_task,  "OTA",  8192, NULL, 1, NULL, 0);
