@@ -72,6 +72,7 @@ bool touch_available = false;
 // ─── WIFI ─────────────────────────────────────────────────────
 String CL_wifissid     = "";
 String CL_wifipassword = "";
+String CL_hostname     = "hassPanel";  // Überschrieben durch hostname= in config.txt
 
 // ─── MQTT ─────────────────────────────────────────────────────
 String   HASS_SERVER     = "";
@@ -219,6 +220,7 @@ void setup() {
   lv_timer_handler();
 
   // WiFi verbinden
+  WiFi.setHostname(CL_hostname.c_str());  // Hostname vor begin() setzen → DHCP + mDNS
   WiFi.setAutoReconnect(true);
   WiFi.begin(CL_wifissid.c_str(), CL_wifipassword.c_str());
   Serial.print("WiFi verbinden mit: ");
@@ -253,7 +255,7 @@ void setup() {
   // WiFi/MQTT auf Core 0 (Priorität 1) – getrennte Cores = kein Mutex-Konflikt
   xTaskCreatePinnedToCore(mqtt_task, "MQTT", 4096, NULL, 1, NULL, 0);
   // OTA/HTTP auf Core 0 (Priorität 1)
-  xTaskCreatePinnedToCore(ota_task,  "OTA",  4096, NULL, 1, NULL, 0);
+  xTaskCreatePinnedToCore(ota_task,  "OTA",  8192, NULL, 1, NULL, 0);
   Serial.println("LVGL-Task: Core 1 | MQTT-Task: Core 0 | OTA-Task: Core 0");
 }
 

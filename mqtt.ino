@@ -68,6 +68,7 @@ void mqttReconnect() {
   Serial.print("MQTT verbinden... ");
   if (mqttClient.connect(clientId.c_str(), HASS_USERNAME.c_str(), HASS_KEY.c_str())) {
     Serial.println("OK");
+    webLog("MQTT verbunden: " + HASS_SERVER);
     for (int i = 0; i < entity_count; i++) {
       if (entities[i].state_topic.length() > 0) {
         mqttClient.subscribe(entities[i].state_topic.c_str());
@@ -86,7 +87,7 @@ void mqttReconnect() {
     }
     mqtt_connected = true;
   } else {
-    Serial.printf("Fehler rc=%d\n", mqttClient.state());
     mqtt_connected = false;
+    webLog("MQTT Fehler rc=" + String(mqttClient.state()));
   }
 }

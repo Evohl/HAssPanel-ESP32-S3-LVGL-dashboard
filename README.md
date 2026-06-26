@@ -64,28 +64,83 @@ Managed via PlatformIO (`platformio.ini`):
 
 ---
 
-## Build & Flash
+## Getting Started
 
-1. Install [PlatformIO](https://platformio.org/)
-2. Clone this repo
-3. Copy `config_template.txt` to your SD card root as **`/config.txt`** and fill in your credentials
-4. Build and flash (first time via USB):
+### 1 – Prerequisites
+
+- [PlatformIO](https://platformio.org/) (VS Code extension or CLI)
+- SD card formatted as FAT32
+- ESP32-8048S070 connected via USB-C
+
+### 2 – First-time USB Flash
 
 ```bash
+git clone https://github.com/Evohl/HAssPanel-ESP32-S3-LVGL-dashboard.git
+cd HAssPanel-ESP32-S3-LVGL-dashboard/espdisplay/HAssPanel
+
+# Copy the config template to the SD card root and fill in your credentials
+cp config_template.txt /path/to/sdcard/config.txt   # edit before inserting!
+
+# Flash via USB (first time only)
 pio run -e ha_panel -t upload
 ```
 
-### OTA Firmware Update (after first USB flash)
+Insert the SD card, power on — the display connects to WiFi and shows the dashboard.
+
+### 3 – Web Management Interface
+
+Once online, open **`http://<hostname>.local/`** (or the IP shown on the display) in any browser:
+
+| Page | URL | What it does |
+|------|-----|--------------|
+| Status | `/` | IP, uptime, heap, WiFi RSSI, MQTT state |
+| Config | `/config` | Edit `config.txt` live in a textarea; upload a new file at the bottom |
+| Log | `/log` | Live log (MQTT connect, OTA progress, errors) |
+| Restart | navbar button | Soft-restart the ESP |
+
+Changes to `config.txt` take effect after restart. A backup is kept as `/config.txt.bak`.
+
+### 4 – OTA Firmware Update (all subsequent flashes — no USB needed)
+
+Edit `platformio.ini` and set `upload_port` to the display's IP:
+
+```ini
+[env:ha_panel_ota]
+extends = env:ha_panel
+upload_protocol = espota
+upload_port = 10.10.200.157   # ← your panel's IP
+upload_flags = --host_ip=10.10.200.2  # ← your PC's IP on the same subnet
+```
+
+Then flash wirelessly:
 
 ```bash
 pio run -e ha_panel_ota -t upload
 ```
 
-The device is reachable as `hassPanel.local` via mDNS. The `upload_port` in `platformio.ini` can also be set to the device's IP address.
+> **Linux firewall note:** The ESP makes a TCP callback to your PC during OTA.
+> If you run `firewalld`, add your local subnet as trusted:
+> ```bash
+> sudo firewall-cmd --zone=trusted --add-source=10.10.0.0/16 --permanent
+> sudo firewall-cmd --reload
+> ```
+> Also fix a Python 3 bug in the bundled `espota.py` (line 220):
+> ```python
+> # change:  except e:
+> # to:      except Exception as e:
+> ```
+> File: `~/.platformio/packages/framework-arduinoespressif32/tools/espota.py`
 
-### Update `config.txt` via Browser
+### 5 – Multiple Panels
 
-Open `http://hassPanel.local/` in a browser, select the new `config.txt` and click **Hochladen**. The display restarts automatically. A backup of the previous config is kept as `/config.txt.bak` on the SD card.
+Each panel needs a unique hostname in its `config.txt`:
+
+```ini
+hostname=hassPanel1   # first display  → http://hassPanel1.local/
+hostname=hassPanel2   # second display → http://hassPanel2.local/
+```
+
+Set the hostname via the web editor before the first OTA, or place a pre-configured `config.txt` on each SD card.
 
 ---
 

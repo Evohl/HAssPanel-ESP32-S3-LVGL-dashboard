@@ -45,6 +45,7 @@ void loadconfig() {
     // ── Globale Einstellungen ────────────────────────────────
     if      (key == "WiFi_ssid")     CL_wifissid       = val;
     else if (key == "WiFi_password") CL_wifipassword   = val;
+    else if (key == "hostname")      CL_hostname       = val;
     else if (key == "MQTT_server")   HASS_SERVER       = val;
     else if (key == "MQTT_port")     HASS_SERVERPORT   = (uint16_t)val.toInt();
     else if (key == "MQTT_user")     HASS_USERNAME     = val;
