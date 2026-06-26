@@ -44,9 +44,12 @@ A fully configurable 7" touch dashboard for Home Assistant, running on the ESP32
 - **MQTT** subscribe (sensors) and publish (switches)
 - **SD card config** — change entities without reflashing
 - **NTP clock** in the header bar
+- **Configurable panel title** (`panel_title=`) and sub-label color (`sub_label_color=`)
+- **Boot screen** with live status (WiFi, OTA, MQTT)
 - **FreeRTOS** dual-core: MQTT on Core 0, LVGL on Core 1
 - **OTA firmware update** via ArduinoOTA (PlatformIO `ha_panel_ota` environment)
-- **HTTP SD-card upload** — update `config.txt` via browser at `http://hassPanel.local/`
+- **Web firmware upload** at `/firmware` — flash `.bin` directly from any browser
+- **HTTP SD-card upload** — update `config.txt` via browser
 
 ---
 
@@ -95,8 +98,7 @@ Once online, open **`http://<hostname>.local/`** (or the IP shown on the display
 |------|-----|--------------|
 | Status | `/` | IP, uptime, heap, WiFi RSSI, MQTT state |
 | Config | `/config` | Edit `config.txt` live in a textarea; upload a new file at the bottom |
-| Log | `/log` | Live log (MQTT connect, OTA progress, errors) |
-| Restart | navbar button | Soft-restart the ESP |
+| Log | `/log` | Live log (MQTT connect, OTA progress, errors) || Firmware | `/firmware` | Upload a `.bin` file to flash firmware without USB or PlatformIO || Restart | navbar button | Soft-restart the ESP |
 
 Changes to `config.txt` take effect after restart. A backup is kept as `/config.txt.bak`.
 
@@ -160,7 +162,9 @@ MQTT_user=
 MQTT_passwd=
 NTP_server=pool.ntp.org
 NTP_timezone=CET-1CEST,M3.5.0/02,M10.5.0/03
-title_color=8B949E
+panel_title=HOME ASSISTANT PANEL   // header text on boot screen
+title_color=8B949E                 // main value color (6-digit hex)
+sub_label_color=8B949E             // sub-label text color (6-digit hex)
 ```
 
 ### Layout
@@ -246,16 +250,23 @@ All colors are 6-digit hex without `#`, e.g. `FEA020`.
 ## Architecture
 
 ```
-Core 0                 Core 1 (lvgl_task)
-──────────────────     ─────────────────────
-mqtt_task:             lv_timer_handler()
-  WiFi reconnect       1-sec entity flush
-  MQTT reconnect       ui_update_entity()
-  mqttClient.loop()    ui_update_header()
-ota_task:
-  ArduinoOTA.handle()
-  httpServer.handle()
+Core 0                      Core 1 (lvgl_task)
+──────────────────────      ───────────────────────────
+mqtt_task:                  lv_timer_handler()  ← suspended during OTA
+  WiFi reconnect            1-sec entity flush
+  MQTT reconnect            ui_update_entity()
+  mqttClient.loop()         ui_update_header()
+ota_task:               ↑   boot screen (ui_boot_show/status)
+  ArduinoOTA.handle()   │
+  httpServer.handle()   │
+  /firmware upload      │
           └── g_lvgl_mutex (FreeRTOS) ──┘
+
+During OTA flash:
+  lvgl_task  → vTaskSuspend (no PSRAM framebuffer writes)
+  mqtt_task  → vTaskSuspend
+  backlight  → off  (no visible DMA flicker)
+  ota_task   → ArduinoOTA.handle() at 1ms polling
 ```
 
 MQTT sets `entity.dirty = true`; the LVGL task flushes all dirty entities once per second.
@@ -266,12 +277,12 @@ MQTT sets `entity.dirty = true`; the LVGL task flushes all dirty entities once p
 
 | File | Purpose |
 |------|---------|
-| `HAssPanel.ino` | Main sketch, globals, FreeRTOS tasks |
+| `HAssPanel.ino` | Main sketch, globals, FreeRTOS tasks, OTA task-suspend logic |
 | `display.ino` | LVGL display + touch driver init |
-| `ui.ino` | Tile construction and UI updates |
+| `ui.ino` | Tile construction, UI updates, boot screen, OTA overlay |
 | `mqtt.ino` | MQTT callback, subscribe, reconnect |
 | `config.ino` | SD card config parser |
-| `ota.ino` | ArduinoOTA + HTTP SD-card upload server |
+| `ota.ino` | ArduinoOTA + HTTP web server (config, log, firmware upload) |
 | `config_template.txt` | Config template (copy to SD as `config.txt`) |
 | `platformio.ini` | PlatformIO build config (`ha_panel` USB, `ha_panel_ota` OTA) |
 | `lv_conf.h` | LVGL configuration |
