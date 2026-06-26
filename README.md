@@ -108,8 +108,8 @@ Edit `platformio.ini` and set `upload_port` to the display's IP:
 [env:ha_panel_ota]
 extends = env:ha_panel
 upload_protocol = espota
-upload_port = 10.10.200.157   # ← your panel's IP
-upload_flags = --host_ip=10.10.200.2  # ← your PC's IP on the same subnet
+upload_port = <panel-ip>    # ← your panel's IP
+upload_flags = --host_ip=<your-pc-ip>  # ← your PC's IP on the same subnet
 ```
 
 Then flash wirelessly:
@@ -118,13 +118,14 @@ Then flash wirelessly:
 pio run -e ha_panel_ota -t upload
 ```
 
-> **Linux firewall note:** The ESP makes a TCP callback to your PC during OTA.
-> If you run `firewalld`, add your local subnet as trusted:
+> **Linux firewall note:** During OTA the ESP opens a TCP connection *back* to your PC.
+> If you use `firewalld` (common on Fedora/RHEL), mark your local subnet as trusted so
+> incoming connections from the ESP are not rejected:
 > ```bash
-> sudo firewall-cmd --zone=trusted --add-source=10.10.0.0/16 --permanent
+> sudo firewall-cmd --zone=trusted --add-source=<your-local-subnet/mask> --permanent
 > sudo firewall-cmd --reload
 > ```
-> Also fix a Python 3 bug in the bundled `espota.py` (line 220):
+> Also fix a Python 3 incompatibility in the bundled `espota.py` (line 220):
 > ```python
 > # change:  except e:
 > # to:      except Exception as e:

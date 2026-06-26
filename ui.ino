@@ -233,7 +233,7 @@ static void build_group_tile(int i, lv_obj_t* tile, int tw, int th) {
 
     lv_obj_t* lbl_sub = lv_label_create(tile);
     lv_label_set_text(lbl_sub, e.sub_label[s].c_str());
-    lv_obj_set_style_text_color(lbl_sub, lv_color_hex(COL_SUBTEXT), 0);
+    lv_obj_set_style_text_color(lbl_sub, lv_color_hex(g_sub_label_color), 0);
     lv_obj_set_style_text_font(lbl_sub, font_sub, 0);
     lv_obj_set_pos(lbl_sub, 0, y);
 

@@ -143,7 +143,8 @@ lv_obj_t* lbl_wifi = nullptr;
 lv_obj_t* lbl_mqtt = nullptr;
 
 // ─── Globale UI-Einstellungen ─────────────────────────────────
-uint32_t g_title_color = 0x8B949E;  // Überschrift-Farbe aller Kacheln (grau)
+uint32_t g_title_color     = 0x8B949E;  // Überschrift-Farbe aller Kacheln (grau)
+uint32_t g_sub_label_color = 0x8B949E;  // Farbe der Sub-Entity-Namen (grau)
 
 // Benutzerdefiniertes Layout: layout=2,4 → 2 Tiles oben, 4 unten
 // g_layout_rows == 0 → automatisches Layout

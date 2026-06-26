@@ -53,7 +53,8 @@ void loadconfig() {
     else if (key == "NTP_server")    ntpServer         = val;
     else if (key == "NTP_timezone")  timezone          = val;
     else if (key == "entity_count")  entity_count      = constrain(val.toInt(), 0, MAX_ENTITIES);
-    else if (key == "title_color")   g_title_color     = (uint32_t)strtoul(val.c_str(), nullptr, 16);
+    else if (key == "title_color")     g_title_color     = (uint32_t)strtoul(val.c_str(), nullptr, 16);
+    else if (key == "sub_label_color")  g_sub_label_color = (uint32_t)strtoul(val.c_str(), nullptr, 16);
     else if (key == "layout") {
       // "2,4" → g_layout_rows=2, g_layout_row_count={2,4}
       g_layout_rows = 0;

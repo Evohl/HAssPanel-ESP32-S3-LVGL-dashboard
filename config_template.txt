@@ -18,6 +18,8 @@ NTP_timezone=CET-1CEST,M3.5.0/02,M10.5.0/03
 
 // Überschrift-Farbe aller Kacheln (Standard: grau)
 title_color=8B949E
+// Farbe der Sub-Entity-Namen (Standard: grau)
+sub_label_color=8B949E
 
 // ── Layout ────────────────────────────────────────────────────
 // Kommagetrennte Anzahl pro Zeile (oben→unten), Entities in Reihenfolge
