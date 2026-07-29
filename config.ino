@@ -18,6 +18,7 @@
 //    entityN_state_topic=ha/.../state  (sensor oder switch)
 //    entityN_cmd_topic=ha/.../set      (nur switch)
 //    entityN_color=RRGGBB              (Hex, optional)
+//    entityN_font_size=0|12|14|16|20|28 (0=Auto, optional)
 // ─────────────────────────────────────────────────────────────
 
 void loadconfig() {
@@ -55,6 +56,10 @@ void loadconfig() {
     else if (key == "entity_count")  entity_count      = constrain(val.toInt(), 0, MAX_ENTITIES);
     else if (key == "title_color")     g_title_color     = (uint32_t)strtoul(val.c_str(), nullptr, 16);
     else if (key == "sub_label_color")  g_sub_label_color = (uint32_t)strtoul(val.c_str(), nullptr, 16);
+    else if (key == "bg_color")         g_bg_color        = (uint32_t)strtoul(val.c_str(), nullptr, 16);
+    else if (key == "header_bg_color")  g_header_bg_color = (uint32_t)strtoul(val.c_str(), nullptr, 16);
+    else if (key == "tile_bg_color")    g_tile_bg_color   = (uint32_t)strtoul(val.c_str(), nullptr, 16);
+    else if (key == "accent_color")     g_accent_color    = (uint32_t)strtoul(val.c_str(), nullptr, 16);
     else if (key == "panel_title")      g_panel_title     = val;
     else if (key == "layout") {
       // "2,4" → g_layout_rows=2, g_layout_row_count={2,4}
@@ -93,10 +98,12 @@ void loadconfig() {
           entities[i].cmd_topic = val;
         } else if (field == "color") {
           entities[i].color = (uint32_t)strtoul(val.c_str(), nullptr, 16);
+        } else if (field == "font_size") {
+          entities[i].font_size = (uint8_t)val.toInt();
         } else if (field == "sub_count") {
           entities[i].sub_count = constrain(val.toInt(), 0, MAX_SUBS);
-        } else if (field == "thresh_count") {
-          entities[i].thresh_count = constrain(val.toInt(), 0, MAX_THRESHOLDS);
+        } else if (field == "hide_title") {
+          entities[i].hide_title = (val == "1");
         } else {
           // Sub-Sensor-Keys: sub1_label, sub1_topic, sub1_unit, ...
           for (int s = 0; s < MAX_SUBS; s++) {
@@ -107,15 +114,8 @@ void loadconfig() {
             else if (sf == "topic") entities[i].sub_topic[s]     = val;
             else if (sf == "cmd")   entities[i].sub_cmd_topic[s] = val;
             else if (sf == "unit")  entities[i].sub_unit[s]      = val;
-            break;
-          }
-          // Farb-Schwellwert-Keys: thresh1_val, thresh1_color, ...
-          for (int t = 0; t < MAX_THRESHOLDS; t++) {
-            String tp = "thresh" + String(t + 1) + "_";
-            if (!field.startsWith(tp)) continue;
-            String tf = field.substring(tp.length());
-            if      (tf == "val")   entities[i].thresh_val[t]   = val.toFloat();
-            else if (tf == "color") entities[i].thresh_color[t] = (uint32_t)strtoul(val.c_str(), nullptr, 16);
+            else if (sf == "color") entities[i].sub_color[s]     = (uint32_t)strtoul(val.c_str(), nullptr, 16);
+            else if (sf == "font_size") entities[i].sub_font_size[s] = (uint8_t)val.toInt();
             break;
           }
         }

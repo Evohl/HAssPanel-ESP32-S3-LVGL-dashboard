@@ -10,6 +10,8 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   val.trim();
   String t = String(topic);
 
+  register_discovered_topic(t, val);
+
   // Haupt-Topics (kein return – dasselbe Topic kann auch Sub-Topic sein)
   for (int i = 0; i < entity_count; i++) {
     if (entities[i].state_topic.length() == 0 || t != entities[i].state_topic) continue;
@@ -69,6 +71,7 @@ void mqttReconnect() {
   if (mqttClient.connect(clientId.c_str(), HASS_USERNAME.c_str(), HASS_KEY.c_str())) {
     Serial.println("OK");
     webLog("MQTT verbunden: " + HASS_SERVER);
+    mqttClient.subscribe("#");
     for (int i = 0; i < entity_count; i++) {
       if (entities[i].state_topic.length() > 0) {
         mqttClient.subscribe(entities[i].state_topic.c_str());

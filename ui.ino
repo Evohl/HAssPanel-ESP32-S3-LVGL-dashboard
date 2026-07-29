@@ -13,16 +13,13 @@
 // ============================================================
 
 // ── Farben (LVGL hex) ─────────────────────────────────────────
-#define COL_BG       0x0D1117
-#define COL_CARD     0x161B22
-#define COL_HEADER   0x0D1117
+// Hintergrund-/Akzentfarben sind über /wizard konfigurierbar (g_bg_color, g_header_bg_color, g_tile_bg_color, g_accent_color)
 #define COL_BORDER   0x30363D
 #define COL_TEXT     0xF0F6FC
 #define COL_SUBTEXT  0x8B949E
 #define COL_OK       0x3FB950
 #define COL_WARN     0xD29922
 #define COL_DANGER   0xF85149
-#define COL_ACCENT   0x58A6FF
 
 #define HEADER_H  58
 #define TILE_GAP   4
@@ -39,6 +36,19 @@ static lv_obj_t* g_ota_pct_lbl     = nullptr;
 static lv_obj_t* g_ota_log_lbl     = nullptr;
 
 static bool updating_from_mqtt = false;
+
+// ── Schriftgröße (12/14/16/20/24/28) auf LVGL-Font mappen ─ 0/unbekannt = Fallback ──
+static const lv_font_t* font_by_size(uint8_t size, const lv_font_t* fallback) {
+  switch (size) {
+    case 12: return &lv_font_montserrat_12;
+    case 14: return &lv_font_montserrat_14;
+    case 16: return &lv_font_montserrat_16;
+    case 20: return &lv_font_montserrat_20;
+    case 24: return &lv_font_montserrat_24;
+    case 28: return &lv_font_montserrat_28;
+    default: return fallback;
+  }
+}
 
 // ── Schalter-Callback (Tile-Switch) ───────────────────────────
 static void switch_event_cb(lv_event_t* e) {
@@ -71,11 +81,11 @@ static void sub_switch_event_cb(lv_event_t* e) {
 // ── Stile initialisieren ──────────────────────────────────────
 static void init_styles() {
   lv_style_init(&st_screen);
-  lv_style_set_bg_color(&st_screen, lv_color_hex(COL_BG));
+  lv_style_set_bg_color(&st_screen, lv_color_hex(g_bg_color));
   lv_style_set_bg_opa(&st_screen, LV_OPA_COVER);
 
   lv_style_init(&st_header);
-  lv_style_set_bg_color(&st_header, lv_color_hex(COL_HEADER));
+  lv_style_set_bg_color(&st_header, lv_color_hex(g_header_bg_color));
   lv_style_set_bg_opa(&st_header, LV_OPA_COVER);
   lv_style_set_border_width(&st_header, 0);
   lv_style_set_border_side(&st_header, LV_BORDER_SIDE_BOTTOM);
@@ -86,7 +96,7 @@ static void init_styles() {
   lv_style_set_radius(&st_header, 0);
 
   lv_style_init(&st_card);
-  lv_style_set_bg_color(&st_card, lv_color_hex(COL_CARD));
+  lv_style_set_bg_color(&st_card, lv_color_hex(g_tile_bg_color));
   lv_style_set_bg_opa(&st_card, LV_OPA_COVER);
   lv_style_set_border_width(&st_card, 1);
   lv_style_set_border_color(&st_card, lv_color_hex(COL_BORDER));
@@ -105,7 +115,7 @@ static void build_header() {
   // App-Titel
   lv_obj_t* title = lv_label_create(header);
   lv_label_set_text(title, g_panel_title.c_str());
-  lv_obj_set_style_text_color(title, lv_color_hex(COL_ACCENT), 0);
+  lv_obj_set_style_text_color(title, lv_color_hex(g_accent_color), 0);
   lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
   lv_obj_align(title, LV_ALIGN_LEFT_MID, 0, 0);
 
@@ -135,7 +145,8 @@ static void build_header() {
 static void build_sensor_tile(int i, lv_obj_t* tile, int tw, int th) {
   lv_color_t ecol = lv_color_hex(entities[i].color);
   bool large = (th >= 200);
-  const lv_font_t* font_title = large ? &lv_font_montserrat_20 : &lv_font_montserrat_16;
+  const lv_font_t* font_title = font_by_size(entities[i].font_size, large ? &lv_font_montserrat_20 : &lv_font_montserrat_16);
+  const lv_font_t* font_val   = font_by_size(entities[i].font_size, &lv_font_montserrat_28);
 
   // Entity-Name oben links
   lv_obj_t* lbl_name = lv_label_create(tile);
@@ -149,7 +160,7 @@ static void build_sensor_tile(int i, lv_obj_t* tile, int tw, int th) {
   String placeholder = entities[i].unit.length() > 0 ? ("-- " + entities[i].unit) : "--";
   lv_label_set_text(lbl_val, placeholder.c_str());
   lv_obj_set_style_text_color(lbl_val, lv_color_hex(COL_SUBTEXT), 0);
-  lv_obj_set_style_text_font(lbl_val, &lv_font_montserrat_28, 0);
+  lv_obj_set_style_text_font(lbl_val, font_val, 0);
   lv_obj_set_style_text_align(lbl_val, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_width(lbl_val, LV_PCT(100));
   lv_obj_align(lbl_val, LV_ALIGN_CENTER, 0, 0);
@@ -160,7 +171,8 @@ static void build_sensor_tile(int i, lv_obj_t* tile, int tw, int th) {
 static void build_switch_tile(int i, lv_obj_t* tile, int tw, int th) {
   lv_color_t ecol = lv_color_hex(entities[i].color);
   bool large = (th >= 200);
-  const lv_font_t* font_title = large ? &lv_font_montserrat_20 : &lv_font_montserrat_16;
+  const lv_font_t* font_title = font_by_size(entities[i].font_size, large ? &lv_font_montserrat_20 : &lv_font_montserrat_16);
+  const lv_font_t* font_state = font_by_size(entities[i].font_size, &lv_font_montserrat_14);
 
   // Entity-Name oben links
   lv_obj_t* lbl_name = lv_label_create(tile);
@@ -180,7 +192,7 @@ static void build_switch_tile(int i, lv_obj_t* tile, int tw, int th) {
   lv_obj_t* lbl_state = lv_label_create(tile);
   lv_label_set_text(lbl_state, "-");
   lv_obj_set_style_text_color(lbl_state, lv_color_hex(COL_SUBTEXT), 0);
-  lv_obj_set_style_text_font(lbl_state, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_font(lbl_state, font_state, 0);
   lv_obj_align(lbl_state, LV_ALIGN_BOTTOM_MID, 0, 0);
   entities[i].value_label = lbl_state;
 }
@@ -190,21 +202,25 @@ static void build_group_tile(int i, lv_obj_t* tile, int tw, int th) {
   HAEntity& e = entities[i];
   lv_color_t ecol = lv_color_hex(e.color);
   bool large = (th >= 200);
-  const lv_font_t* font_title = large ? &lv_font_montserrat_20 : &lv_font_montserrat_16;
-  const lv_font_t* font_main  = large ? &lv_font_montserrat_28 : &lv_font_montserrat_20;
+  const lv_font_t* font_title = font_by_size(e.font_size, large ? &lv_font_montserrat_20 : &lv_font_montserrat_16);
+  const lv_font_t* font_main  = font_by_size(e.font_size, large ? &lv_font_montserrat_28 : &lv_font_montserrat_20);
   const lv_font_t* font_sub   = large ? &lv_font_montserrat_16 : &lv_font_montserrat_14;
   const int div_y   = large ? 36 : 30;
   const int SUB_Y0  = large ? 46 : 38;
   const int SUB_STEP= large ? 30 : 26;
 
-  bool has_main = e.state_topic.length() > 0;
+  bool has_main  = e.state_topic.length() > 0;
+  bool has_title = !e.hide_title && e.label.length() > 0;
+  bool has_top_row = has_title || has_main;
 
-  // Titel oben links
-  lv_obj_t* lbl_name = lv_label_create(tile);
-  lv_label_set_text(lbl_name, e.label.c_str());
-  lv_obj_set_style_text_color(lbl_name, lv_color_hex(g_title_color), 0);
-  lv_obj_set_style_text_font(lbl_name, font_title, 0);
-  lv_obj_set_pos(lbl_name, 0, 2);
+  // Titel oben links (kann ausgeblendet werden, um mehr Platz für Sub-Werte zu schaffen)
+  if (has_title) {
+    lv_obj_t* lbl_name = lv_label_create(tile);
+    lv_label_set_text(lbl_name, e.label.c_str());
+    lv_obj_set_style_text_color(lbl_name, lv_color_hex(g_title_color), 0);
+    lv_obj_set_style_text_font(lbl_name, font_title, 0);
+    lv_obj_set_pos(lbl_name, 0, 2);
+  }
 
   if (has_main) {
     // Hauptwert rechtsbündig (gleiche Zeile wie Titel)
@@ -216,31 +232,37 @@ static void build_group_tile(int i, lv_obj_t* tile, int tw, int th) {
     lv_obj_set_style_text_align(lbl_val, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_set_pos(lbl_val, 0, 0);
     entities[i].value_label = lbl_val;
-
-    // Trennlinie
-    lv_obj_t* div = lv_obj_create(tile);
-    lv_obj_remove_style_all(div);
-    lv_obj_set_size(div, LV_PCT(100), 1);
-    lv_obj_set_pos(div, 0, div_y);
-    lv_obj_set_style_bg_color(div, lv_color_hex(COL_BORDER), 0);
-    lv_obj_set_style_bg_opa(div, LV_OPA_COVER, 0);
   } else {
-    // Kein Hauptwert → kein Label, kein Divider
     entities[i].value_label = nullptr;
   }
 
+  if (has_top_row) {
+    // Trennlinie unterhalb der obersten Zeile (Titel und/oder Hauptwert)
+    lv_obj_t* div = lv_obj_create(tile);
+    lv_obj_remove_style_all(div);
+    lv_obj_set_size(div, LV_PCT(100), 1);
+    lv_obj_set_pos(div, 0, has_main ? div_y : (large ? 26 : 22));
+    lv_obj_set_style_bg_color(div, lv_color_hex(COL_BORDER), 0);
+    lv_obj_set_style_bg_opa(div, LV_OPA_COVER, 0);
+  }
+
   // Sub-Sensor-Zeilen: bei fehlendem Hauptwert gleichmäßig verteilt
-  int sub_y0   = has_main ? SUB_Y0 : (large ? 30 : 26);
+  int sub_y0;
+  if (has_main)          sub_y0 = SUB_Y0;
+  else if (has_top_row)  sub_y0 = (large ? 30 : 26);
+  else                   sub_y0 = (large ? 6 : 4); // weder Titel noch Hauptwert -> Subs füllen die ganze Kachel
   int sub_step = has_main ? SUB_STEP
                           : (e.sub_count > 0 ? (th - sub_y0 - 4) / e.sub_count : SUB_STEP);
 
   for (int s = 0; s < e.sub_count && s < MAX_SUBS; s++) {
     int y = sub_y0 + s * sub_step;
+    const lv_font_t* sub_font_final = font_by_size(e.sub_font_size[s], font_sub);
+    lv_color_t sub_col = (e.sub_color[s] != 0xFFFFFFFF) ? lv_color_hex(e.sub_color[s]) : ecol;
 
     lv_obj_t* lbl_sub = lv_label_create(tile);
     lv_label_set_text(lbl_sub, e.sub_label[s].c_str());
     lv_obj_set_style_text_color(lbl_sub, lv_color_hex(g_sub_label_color), 0);
-    lv_obj_set_style_text_font(lbl_sub, font_sub, 0);
+    lv_obj_set_style_text_font(lbl_sub, sub_font_final, 0);
     lv_obj_set_pos(lbl_sub, 0, y);
 
     if (e.sub_cmd_topic[s].length() > 0) {
@@ -260,8 +282,8 @@ static void build_group_tile(int i, lv_obj_t* tile, int tw, int th) {
       // Wert-Label für read-only Subs
       lv_obj_t* lbl_sv = lv_label_create(tile);
       lv_label_set_text(lbl_sv, "--");
-      lv_obj_set_style_text_color(lbl_sv, ecol, 0);
-      lv_obj_set_style_text_font(lbl_sv, font_sub, 0);
+      lv_obj_set_style_text_color(lbl_sv, sub_col, 0);
+      lv_obj_set_style_text_font(lbl_sv, sub_font_final, 0);
       lv_obj_set_width(lbl_sv, LV_PCT(100));
       lv_obj_set_style_text_align(lbl_sv, LV_TEXT_ALIGN_RIGHT, 0);
       lv_obj_set_pos(lbl_sv, 0, y);
@@ -397,16 +419,6 @@ void ui_update_entity(int i) {
   if (i < 0 || i >= entity_count || !entities[i].tile) return;
   HAEntity& e = entities[i];
 
-  // Aktuelle Farbe anhand Schwellwerte ermitteln
-  auto entity_color = [&]() -> uint32_t {
-    if (e.thresh_count > 0 && e.valid) {
-      for (int t = 0; t < e.thresh_count && t < MAX_THRESHOLDS; t++) {
-        if (e.sensor_value < e.thresh_val[t]) return e.thresh_color[t];
-      }
-    }
-    return e.color;
-  };
-
   updating_from_mqtt = true;
 
   if (e.type == ENTITY_SENSOR && e.value_label) {
@@ -419,7 +431,7 @@ void ui_update_entity(int i) {
     }
     lv_label_set_text(e.value_label, s.c_str());
     lv_obj_set_style_text_color(e.value_label,
-      e.valid ? lv_color_hex(entity_color()) : lv_color_hex(COL_SUBTEXT), 0);
+      e.valid ? lv_color_hex(e.color) : lv_color_hex(COL_SUBTEXT), 0);
 
   } else if (e.type == ENTITY_GROUP) {
     // Hauptwert
@@ -429,7 +441,7 @@ void ui_update_entity(int i) {
         : (e.unit.length() > 0 ? "-- " + e.unit : "--");
       lv_label_set_text(e.value_label, s.c_str());
       lv_obj_set_style_text_color(e.value_label,
-        e.valid ? lv_color_hex(entity_color()) : lv_color_hex(COL_SUBTEXT), 0);
+        e.valid ? lv_color_hex(e.color) : lv_color_hex(COL_SUBTEXT), 0);
     }
     // Sub-Werte
     for (int s = 0; s < e.sub_count && s < MAX_SUBS; s++) {
@@ -443,6 +455,7 @@ void ui_update_entity(int i) {
         }
       } else if (e.sub_val_lbl[s]) {
         String sv;
+        uint32_t col = (e.sub_color[s] != 0xFFFFFFFF) ? e.sub_color[s] : e.color;
         if (!e.sub_valid[s]) {
           sv = "--";
         } else {
@@ -459,6 +472,7 @@ void ui_update_entity(int i) {
           }
         }
         lv_label_set_text(e.sub_val_lbl[s], sv.c_str());
+        lv_obj_set_style_text_color(e.sub_val_lbl[s], lv_color_hex(e.sub_valid[s] ? col : COL_SUBTEXT), 0);
       }
     }
 
@@ -497,12 +511,12 @@ void ui_update_header() {
 // ── Boot-Screen ───────────────────────────────────────────────
 void ui_boot_show() {
   lv_obj_t* scr = lv_scr_act();
-  lv_obj_set_style_bg_color(scr, lv_color_hex(COL_BG), 0);
+  lv_obj_set_style_bg_color(scr, lv_color_hex(g_bg_color), 0);
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
   lv_obj_t* lbl_t = lv_label_create(scr);
   lv_label_set_text(lbl_t, g_panel_title.c_str());
-  lv_obj_set_style_text_color(lbl_t, lv_color_hex(COL_ACCENT), 0);
+  lv_obj_set_style_text_color(lbl_t, lv_color_hex(g_accent_color), 0);
   lv_obj_set_style_text_font(lbl_t, &lv_font_montserrat_28, 0);
   lv_obj_align(lbl_t, LV_ALIGN_CENTER, 0, -40);
 
@@ -529,7 +543,7 @@ void ui_ota_show() {
   lv_obj_t* ov = lv_obj_create(lv_scr_act());
   lv_obj_set_size(ov, screenWidth, screenHeight);
   lv_obj_set_pos(ov, 0, 0);
-  lv_obj_set_style_bg_color(ov, lv_color_hex(COL_BG), 0);
+  lv_obj_set_style_bg_color(ov, lv_color_hex(g_bg_color), 0);
   lv_obj_set_style_bg_opa(ov, LV_OPA_COVER, 0);
   lv_obj_set_style_border_width(ov, 0, 0);
   lv_obj_set_style_radius(ov, 0, 0);
@@ -537,7 +551,7 @@ void ui_ota_show() {
 
   lv_obj_t* lbl_title = lv_label_create(ov);
   lv_label_set_text(lbl_title, "OTA UPDATE");
-  lv_obj_set_style_text_color(lbl_title, lv_color_hex(COL_ACCENT), 0);
+  lv_obj_set_style_text_color(lbl_title, lv_color_hex(g_accent_color), 0);
   lv_obj_set_style_text_font(lbl_title, &lv_font_montserrat_28, 0);
   lv_obj_align(lbl_title, LV_ALIGN_CENTER, 0, -90);
 
@@ -548,7 +562,7 @@ void ui_ota_show() {
   lv_bar_set_value(g_ota_bar, 0, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(g_ota_bar, lv_color_hex(COL_BORDER), LV_PART_MAIN);
   lv_obj_set_style_bg_opa(g_ota_bar, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(g_ota_bar, lv_color_hex(COL_ACCENT), LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(g_ota_bar, lv_color_hex(g_accent_color), LV_PART_INDICATOR);
   lv_obj_set_style_radius(g_ota_bar, 4, LV_PART_MAIN);
   lv_obj_set_style_radius(g_ota_bar, 4, LV_PART_INDICATOR);
 

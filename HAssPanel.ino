@@ -83,6 +83,25 @@ String   clientId        = "HAssPanel-" + String((uint32_t)ESP.getEfuseMac(), HE
 
 bool mqtt_connected = false;
 
+#define MAX_DISCOVERED_TOPICS 64
+String discovered_topics[MAX_DISCOVERED_TOPICS];
+String discovered_payloads[MAX_DISCOVERED_TOPICS];
+int discovered_topic_count = 0;
+
+void register_discovered_topic(const String& topic, const String& payload) {
+  for (int i = 0; i < discovered_topic_count; i++) {
+    if (discovered_topics[i] == topic) {
+      discovered_payloads[i] = payload;
+      return;
+    }
+  }
+  if (discovered_topic_count < MAX_DISCOVERED_TOPICS) {
+    discovered_topics[discovered_topic_count] = topic;
+    discovered_payloads[discovered_topic_count] = payload;
+    discovered_topic_count++;
+  }
+}
+
 WiFiClient   espClient;
 PubSubClient mqttClient(espClient);
 
@@ -92,9 +111,8 @@ String ntpServer = "pool.ntp.org";
 String timezone  = "CET-1CEST,M3.5.0/02,M10.5.0/03";
 
 // ─── ENTITY MODEL ─────────────────────────────────────────────
-#define MAX_ENTITIES   8
-#define MAX_SUBS       5
-#define MAX_THRESHOLDS 3
+#define MAX_ENTITIES   12
+#define MAX_SUBS       8
 #define MAX_ROWS       4
 
 enum EntityType { ENTITY_SENSOR, ENTITY_SWITCH, ENTITY_GROUP };
@@ -106,23 +124,23 @@ struct HAEntity {
   String     state_topic   = "";
   String     cmd_topic     = "";
   uint32_t   color         = 0xFFFFFF;  // 0xRRGGBB
+  uint8_t    font_size     = 0;         // 0=Auto (nach Kachelgröße), sonst 12/14/16/20/28
   // Laufzeit-Werte
   float      sensor_value  = 0.0f;
   bool       switch_state  = false;
   bool       valid         = false;
   // Gruppe: bis zu MAX_SUBS Sub-Sensoren
+  bool       hide_title                = false; // Gruppe: Titelzeile ausblenden, nur Sub-Werte anzeigen
   int        sub_count                = 0;
   String     sub_label[MAX_SUBS];
   String     sub_topic[MAX_SUBS];
   String     sub_cmd_topic[MAX_SUBS];   // leer = read-only; gesetzt = Toggle-Switch
   String     sub_unit[MAX_SUBS];
+  uint32_t   sub_color[MAX_SUBS]     = {0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF,0xFFFFFFFF}; // 0xFFFFFFFF = nicht gesetzt -> Fallback auf color
+  uint8_t    sub_font_size[MAX_SUBS] = {}; // 0=Auto, sonst 12/14/16/20/28
   float      sub_value[MAX_SUBS]      = {};
   bool       sub_valid[MAX_SUBS]      = {};
   String     sub_raw[MAX_SUBS];          // Rohwert-String (z.B. "on"/"off")
-  // Farb-Schwellwerte (aufsteigend sortiert)
-  int      thresh_count                   = 0;
-  float    thresh_val[MAX_THRESHOLDS]     = {};
-  uint32_t thresh_color[MAX_THRESHOLDS]   = {};
   // LVGL Widgets
   lv_obj_t*  tile                     = nullptr;
   lv_obj_t*  value_label              = nullptr;
@@ -145,6 +163,10 @@ lv_obj_t* lbl_mqtt = nullptr;
 // ─── Globale UI-Einstellungen ─────────────────────────────────
 uint32_t g_title_color     = 0x8B949E;  // Überschrift-Farbe aller Kacheln (grau)
 uint32_t g_sub_label_color = 0x8B949E;  // Farbe der Sub-Entity-Namen (grau)
+uint32_t g_bg_color        = 0x0D1117;  // Bildschirm-Hintergrundfarbe
+uint32_t g_header_bg_color = 0x0D1117;  // Kopfzeilen-Hintergrundfarbe
+uint32_t g_tile_bg_color   = 0x161B22;  // Kachel-Hintergrundfarbe
+uint32_t g_accent_color    = 0x58A6FF;  // Akzentfarbe (Panel-Titel, Fortschrittsbalken)
 String   g_panel_title     = "HOME ASSISTANT PANEL";  // Titel in der Kopfzeile
 
 // Benutzerdefiniertes Layout: layout=2,4 → 2 Tiles oben, 4 unten
