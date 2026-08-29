@@ -4,6 +4,8 @@ A fully configurable 7" touch dashboard for Home Assistant, running on the ESP32
 
 ![LVGL Dark Theme Dashboard](https://img.shields.io/badge/LVGL-8.3-blue) ![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32--S3-orange) ![License](https://img.shields.io/badge/License-MIT-green)
 
+![HAssPanel web wizard with live dashboard preview](docs/web-wizard.jpg)
+
 ---
 
 ## Hardware
