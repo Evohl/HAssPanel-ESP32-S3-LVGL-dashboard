@@ -188,6 +188,7 @@ TaskHandle_t           g_mqtt_task_handle  = NULL;
 
 // ─── WiFi/MQTT-Task auf Core 0 ─────────────────────────────
 void mqtt_task(void* param) {
+  unsigned long lastWifiReconnectAttempt = 0;
   while (true) {
     if (g_ota_active) {
       vTaskSuspend(NULL);  // sicherer Suspend-Punkt: kein Mutex gehalten
@@ -203,6 +204,13 @@ void mqtt_task(void* param) {
       }
     } else {
       mqtt_connected = false;
+      if (mqttClient.connected()) mqttClient.disconnect();
+
+      if (millis() - lastWifiReconnectAttempt >= 5000) {
+        lastWifiReconnectAttempt = millis();
+        Serial.println("WiFi getrennt, starte Wiederverbindung...");
+        WiFi.reconnect();
+      }
     }
     vTaskDelay(pdMS_TO_TICKS(5));
   }

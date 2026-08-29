@@ -42,6 +42,7 @@ A fully configurable 7" touch dashboard for Home Assistant, running on the ESP32
 - **Custom tile layout** via `layout=rows,cols` in config
 - **LVGL 8.3** dark theme, Montserrat fonts
 - **MQTT** subscribe (sensors) and publish (switches)
+- Automatic **WiFi recovery** every 5 seconds with MQTT reconnect and topic resubscription
 - **SD card config** — change entities without reflashing
 - **NTP clock** in the header bar
 - **Configurable panel title** (`panel_title=`) and sub-label color (`sub_label_color=`)
@@ -268,6 +269,8 @@ During OTA flash:
   backlight  → off  (no visible DMA flicker)
   ota_task   → ArduinoOTA.handle() at 1ms polling
 ```
+
+If WiFi drops, `mqtt_task` closes the stale MQTT connection and explicitly retries WiFi every 5 seconds. Once WiFi is back, MQTT reconnects and subscribes to all configured topics again.
 
 MQTT sets `entity.dirty = true`; the LVGL task flushes all dirty entities once per second.
 
