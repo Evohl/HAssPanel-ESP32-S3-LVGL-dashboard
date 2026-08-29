@@ -1,6 +1,6 @@
 # HAssPanel – ESP32-S3 LVGL Dashboard for Home Assistant
 
-A fully configurable 7" touch dashboard for Home Assistant, running on the ESP32-S3 with an 800×480 RGB panel. All entities, topics, colors, and layout are defined via a plain-text config file on the SD card — no recompiling needed.
+A fully configurable 7" touch dashboard for Home Assistant, running on the ESP32-S3 with an 800×480 RGB panel. Configure entities, topics, colors, fonts, and layout from the built-in web wizard or a plain-text file on the SD card — no recompiling needed.
 
 ![LVGL Dark Theme Dashboard](https://img.shields.io/badge/LVGL-8.3-blue) ![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32--S3-orange) ![License](https://img.shields.io/badge/License-MIT-green)
 
@@ -35,11 +35,14 @@ A fully configurable 7" touch dashboard for Home Assistant, running on the ESP32
 
 ## Features
 
-- Up to **8 configurable entities** — Sensor, Switch, or Group
-- **Group entities** with up to 5 sub-values per tile
+- Up to **12 configurable entities** — Sensor, Switch, or Group
+- **Group entities** with up to 8 sub-values per tile
 - Sub-values can be **read-only** or **toggle switches** (MQTT publish on tap)
-- **Color thresholds** per entity (up to 3 breakpoints)
-- **Custom tile layout** via `layout=rows,cols` in config
+- **Web configuration wizard** with an 800×480 live preview
+- Automatic **MQTT topic discovery** with live values in the wizard
+- **Custom tile layout** by defining the tile count for each row, for example `layout=2,3,2`
+- Configurable **theme colors** plus per-entity and per-sub-value colors and font sizes
+- Optional title-free group tiles for compact value-only layouts
 - **LVGL 8.3** dark theme, Montserrat fonts
 - **MQTT** subscribe (sensors) and publish (switches)
 - Automatic **WiFi recovery** every 5 seconds with MQTT reconnect and topic resubscription
@@ -98,10 +101,16 @@ Once online, open **`http://<hostname>.local/`** (or the IP shown on the display
 | Page | URL | What it does |
 |------|-----|--------------|
 | Status | `/` | IP, uptime, heap, WiFi RSSI, MQTT state |
-| Config | `/config` | Edit `config.txt` live in a textarea; upload a new file at the bottom |
-| Log | `/log` | Live log (MQTT connect, OTA progress, errors) || Firmware | `/firmware` | Upload a `.bin` file to flash firmware without USB or PlatformIO || Restart | navbar button | Soft-restart the ESP |
+| Wizard | `/wizard` | Configure tiles, topics, colors, fonts, and layout with a live display preview |
+| Config | `/config` | Edit `config.txt` directly or upload a replacement file |
+| Log | `/log` | Live log, refreshed every second with the latest 80 entries |
+| Firmware | `/firmware` | Upload and flash a PlatformIO `.bin` file from the browser |
+| Restart | `/restart` | Restart the panel remotely |
+| MQTT API | `/api/topics` | Return the MQTT connection state and discovered topic values as JSON |
 
-Changes to `config.txt` take effect after restart. A backup is kept as `/config.txt.bak`.
+The wizard discovers MQTT topics received by the panel and uses their current values in the preview. It supports Sensor, Switch, and Group tiles, read-only or switchable sub-values, predefined color themes, custom colors, font sizes, and custom row layouts.
+
+Saving through the wizard or config editor writes `/config.txt`, keeps the previous file as `/config.txt.bak`, and restarts the panel automatically.
 
 ### 4 – OTA Firmware Update (all subsequent flashes — no USB needed)
 
@@ -157,6 +166,7 @@ Copy `config_template.txt` to the SD card root as `config.txt` and edit it. Line
 ```ini
 WiFi_ssid=YOUR_SSID
 WiFi_password=YOUR_PASSWORD
+hostname=hassPanel1
 MQTT_server=192.168.1.x
 MQTT_port=1883
 MQTT_user=
@@ -164,7 +174,11 @@ MQTT_passwd=
 NTP_server=pool.ntp.org
 NTP_timezone=CET-1CEST,M3.5.0/02,M10.5.0/03
 panel_title=HOME ASSISTANT PANEL   // header text on boot screen
-title_color=8B949E                 // main value color (6-digit hex)
+bg_color=0D1117                    // screen background
+header_bg_color=0D1117             // header background
+tile_bg_color=161B22               // tile background
+accent_color=58A6FF                // panel title and progress bar
+title_color=8B949E                 // tile title color
 sub_label_color=8B949E             // sub-label text color (6-digit hex)
 ```
 
@@ -175,7 +189,7 @@ sub_label_color=8B949E             // sub-label text color (6-digit hex)
 layout=2,3
 ```
 
-Leave empty for automatic layout (2-column grid).
+Each number is the number of tiles in that row. Leave `layout` empty or omit it for automatic layout.
 
 ### Entity Types
 
@@ -186,6 +200,7 @@ entity1_label=Solar
 entity1_topic=homeassistant/sensor/solar_power/state
 entity1_unit=W
 entity1_color=FEA020
+entity1_font_size=28
 ```
 
 #### Switch
@@ -208,6 +223,8 @@ entity3_sub_count=2
 entity3_sub1_label=Laden
 entity3_sub1_topic=homeassistant/sensor/battery_charge/state
 entity3_sub1_unit=W
+entity3_sub1_color=58A6FF
+entity3_sub1_font_size=16
 entity3_sub2_label=Entladen
 entity3_sub2_topic=homeassistant/sensor/battery_discharge/state
 entity3_sub2_unit=W
@@ -215,24 +232,17 @@ entity3_sub2_unit=W
 
 A group with no `entityN_topic` shows only sub-values (no main value).
 
+Set `entityN_hide_title=1` to hide a group tile's title and use the available space for its sub-values.
+
 #### Sub-value as toggle switch
 ```ini
 entity3_sub1_cmd=homeassistant/switch/fan/set
 ```
 When `sub_cmd` is set, the sub renders as a tap-to-toggle switch instead of a label.
 
-### Color Thresholds
+### Font Sizes
 
-Up to 3 breakpoints, evaluated in order (first match wins):
-
-```ini
-entity3_thresh_count=2
-entity3_thresh1_val=20
-entity3_thresh1_color=F85149
-entity3_thresh2_val=50
-entity3_thresh2_color=FEA020
-// >= 50 → falls back to entity base color
-```
+Set `entityN_font_size` or `entityN_subM_font_size` to `12`, `14`, `16`, `20`, `24`, or `28`. Omit the setting or use `0` to select a size automatically based on the tile dimensions.
 
 ### Colors
 
