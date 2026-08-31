@@ -1,5 +1,5 @@
 // ============================================================
-//  HOME ASSISTANT PANEL  v1.0
+//  HOME ASSISTANT PANEL  v1.1.0
 //  Universelle LVGL-Anzeigetafel für Home Assistant
 //  7" ESP32-8048S070 (800×480 RGB-Panel, ESP32-S3)
 //
@@ -35,6 +35,8 @@
 #include <TAMC_GT911.h>
 #include <lvgl.h>
 #include <time.h>
+
+const char* FIRMWARE_VERSION = "1.1.0";
 
 // ─── DISPLAY ──────────────────────────────────────────────────
 #define TFT_BL 2

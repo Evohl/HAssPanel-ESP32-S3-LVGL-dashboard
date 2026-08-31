@@ -199,9 +199,9 @@ static String colorField(const String& fieldLabel, const String& name, uint32_t 
   String h = hex6(val);
   return "<div class='field field-color'><label>" + fieldLabel + "</label>"
          "<div class='colorwrap'>"
-         "<input type='color' id='" + name + "_c' name='" + name + "' value='#" + h + "' oninput=\"syncColorToHex(this)\">"
+         "<input type='color' id='" + name + "_c' name='" + name + "' value='#" + h + "' oninput=\"syncColorToHex(this)\" onchange=\"syncColorToHex(this)\">"
          "<input type='text' id='" + name + "_h' class='hexbox' value='" + h + "' maxlength='7' spellcheck='false' "
-         "oninput=\"syncHexToColor(this)\"></div></div>";
+         "oninput=\"syncHexToColor(this)\" onchange=\"syncHexToColor(this)\"></div></div>";
 }
 
 static String fontSizeField(const String& fieldLabel, const String& name, uint8_t val) {
@@ -352,8 +352,8 @@ static void sendWizardPage() {
   httpServer.sendContent("function hex(v){var s=(v||'#FFFFFF').toString().trim().replace(/^#/,'').toUpperCase();if(s.length<6)s=(s+'000000').slice(0,6);return '#'+s.slice(0,6);}");
   httpServer.sendContent("function fieldVal(name){var el=document.querySelector('[name='+name+']');return el?el.value:'';}");
   httpServer.sendContent("function fieldChecked(name){var el=document.querySelector('[name='+name+']');return el?el.checked:false;}");
-  httpServer.sendContent("function syncColorToHex(colorEl){var h=document.getElementById(colorEl.id+'_h');if(h)h.value=colorEl.value.replace('#','').toUpperCase();}");
-  httpServer.sendContent("function syncHexToColor(hexEl){var v=hexEl.value.replace('#','').trim();if(!/^[0-9A-Fa-f]{6}$/.test(v))return;var c=document.getElementById(hexEl.id.slice(0,-2)+'_c');if(c)c.value='#'+v.toUpperCase();}");
+  httpServer.sendContent("function syncColorToHex(colorEl){var h=document.getElementById(colorEl.id.replace(/_c$/,'_h'));if(h){h.value=colorEl.value.replace('#','').toUpperCase();}}");
+  httpServer.sendContent("function syncHexToColor(hexEl){var v=hexEl.value.replace('#','').trim();if(!/^[0-9A-Fa-f]{6}$/.test(v))return;var c=document.getElementById(hexEl.id.replace(/_h$/,'_c'));if(c)c.value='#'+v.toUpperCase();}");
   httpServer.sendContent("function toggleSubs(i){var block=document.getElementById('subs-block-'+i);if(!block)return;var t=fieldVal('entity'+i+'_type');block.className='subs-block'+(t==='group'?' active':'');}");
   httpServer.sendContent("function toggleMainFields(i){var t=fieldVal('entity'+i+'_type');var u=document.getElementById('unit-field-'+i);var c=document.getElementById('cmd-field-'+i);if(u)u.classList.toggle('hidden-field',t==='switch');if(c)c.classList.toggle('hidden-field',t!=='switch');}");
   httpServer.sendContent("function liveOf(topic){if(!topic||liveTopics[topic]===undefined)return null;var v=liveTopics[topic];if(/^(unavailable|unknown|none)$/i.test(v))return null;return v;}");
@@ -519,6 +519,8 @@ static void handleRoot() {
     "<div class='card'><div class='row'>"
     "<div class='kv'><span class='k'>IP</span><span class='v'>" + WiFi.localIP().toString() + "</span></div>"
     "<div class='kv'><span class='k'>Hostname</span><span class='v'>" + CL_hostname + ".local</span></div>"
+    "<div class='kv'><span class='k'>Firmware</span><span class='v'>v" + String(FIRMWARE_VERSION) + "</span></div>"
+    "<div class='kv'><span class='k'>Build</span><span class='v'>" + String(__DATE__) + " " + String(__TIME__) + "</span></div>"
     "<div class='kv'><span class='k'>Uptime</span><span class='v'>" + String(upStr) + "</span></div>"
     "<div class='kv'><span class='k'>Freier Heap</span><span class='v'>" + String(ESP.getFreeHeap() / 1024) + " KB</span></div>"
     "<div class='kv'><span class='k'>WiFi RSSI</span><span class='v'>" + String(WiFi.RSSI()) + " dBm</span></div>"
@@ -960,9 +962,27 @@ void ota_setup() {
 
 // ─── FreeRTOS Task ────────────────────────────────────────────
 void ota_task(void* param) {
+  bool wifiConnected = WiFi.status() == WL_CONNECTED;
   while (true) {
-    ArduinoOTA.handle();
-    if (!g_ota_active) httpServer.handleClient();
+    bool connectedNow = WiFi.status() == WL_CONNECTED;
+    if (connectedNow != wifiConnected) {
+      wifiConnected = connectedNow;
+      if (wifiConnected) {
+        ArduinoOTA.begin();
+        MDNS.begin(CL_hostname.c_str());
+        httpServer.begin();
+        webLog("Netzwerkdienste neu gestartet: http://" + CL_hostname + ".local  (" + WiFi.localIP().toString() + ")");
+      } else {
+        httpServer.stop();
+        ArduinoOTA.end();
+        MDNS.end();
+        webLog("WiFi getrennt: Netzwerkdienste gestoppt");
+      }
+    }
+    if (wifiConnected) {
+      ArduinoOTA.handle();
+      if (!g_ota_active) httpServer.handleClient();
+    }
     vTaskDelay(pdMS_TO_TICKS(g_ota_active ? 1 : 5));  // OTA: schneller pollen
   }
 }

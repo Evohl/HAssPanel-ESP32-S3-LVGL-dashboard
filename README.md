@@ -37,6 +37,7 @@ A fully configurable 7" touch dashboard for Home Assistant, running on the ESP32
 
 ## Features
 
+- **Firmware version 1.1.0** with version and build timestamp shown on the status page
 - Up to **12 configurable entities** — Sensor, Switch, or Group
 - **Group entities** with up to 8 sub-values per tile
 - Sub-values can be **read-only** or **toggle switches** (MQTT publish on tap)
@@ -47,7 +48,7 @@ A fully configurable 7" touch dashboard for Home Assistant, running on the ESP32
 - Optional title-free group tiles for compact value-only layouts
 - **LVGL 8.3** dark theme, Montserrat fonts
 - **MQTT** subscribe (sensors) and publish (switches)
-- Automatic **WiFi recovery** every 5 seconds with MQTT reconnect and topic resubscription
+- Automatic **WiFi recovery** every 5 seconds with MQTT reconnect, topic resubscription, and restart of HTTP, mDNS, and ArduinoOTA services
 - **SD card config** — change entities without reflashing
 - **NTP clock** in the header bar
 - **Configurable panel title** (`panel_title=`) and sub-label color (`sub_label_color=`)
@@ -102,7 +103,7 @@ Once online, open **`http://<hostname>.local/`** (or the IP shown on the display
 
 | Page | URL | What it does |
 |------|-----|--------------|
-| Status | `/` | IP, uptime, heap, WiFi RSSI, MQTT state |
+| Status | `/` | Firmware version, build timestamp, IP, uptime, heap, WiFi RSSI, and MQTT state |
 | Wizard | `/wizard` | Configure tiles, topics, colors, fonts, and layout with a live display preview |
 | Config | `/config` | Edit `config.txt` directly or upload a replacement file |
 | Log | `/log` | Live log, refreshed every second with the latest 80 entries |
@@ -282,7 +283,7 @@ During OTA flash:
   ota_task   → ArduinoOTA.handle() at 1ms polling
 ```
 
-If WiFi drops, `mqtt_task` closes the stale MQTT connection and explicitly retries WiFi every 5 seconds. Once WiFi is back, MQTT reconnects and subscribes to all configured topics again.
+If WiFi drops, `mqtt_task` closes the stale MQTT connection and explicitly retries WiFi every 5 seconds. Once WiFi is back, MQTT reconnects and subscribes to all configured topics again. The OTA task also rebinds the HTTP server, mDNS responder, and ArduinoOTA service so the web management interface and wireless updates remain available after a reconnect.
 
 MQTT sets `entity.dirty = true`; the LVGL task flushes all dirty entities once per second.
 
